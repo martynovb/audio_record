@@ -14,7 +14,7 @@ Press `Ctrl+C` to stop. The default file name is
 
 | Platform | Status | Native API |
 | --- | --- | --- |
-| macOS 15+ | Supported, self-contained release binary | ScreenCaptureKit + AVFoundation |
+| macOS 15+ on Apple Silicon | Supported, self-contained release binary | ScreenCaptureKit + AVFoundation |
 | Windows 10/11 x64 | Supported, self-contained release binary | WASAPI + Media Foundation |
 
 The installed executable does not require Go, Swift, .NET, FFmpeg, Python, or

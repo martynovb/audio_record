@@ -60,13 +60,12 @@ command -v shasum >/dev/null 2>&1 || fail "shasum is required"
 
 case "$(uname -s)" in
   Darwin) platform="darwin" ;;
-  *) fail "this release currently supports macOS only; Windows support is not implemented yet" ;;
+  *) fail "use install.ps1 on Windows; this installer supports macOS only" ;;
 esac
 
 case "$(uname -m)" in
   arm64) architecture="arm64" ;;
-  x86_64) architecture="amd64" ;;
-  *) fail "unsupported architecture: $(uname -m)" ;;
+  *) fail "this macOS release supports Apple Silicon only" ;;
 esac
 
 asset="audio-record-${platform}-${architecture}.tar.gz"

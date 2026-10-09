@@ -12,41 +12,34 @@ permissions:
 
 jobs:
   macos:
-    name: macOS ${{ matrix.goarch }}
+    name: macOS arm64
     runs-on: macos-15
-    strategy:
-      matrix:
-        include:
-          - goarch: arm64
-            swiftarch: arm64
-          - goarch: amd64
-            swiftarch: x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.21.x"
       - name: Build native helper
-        run: swift build --package-path platforms/macos --configuration release --arch "${{ matrix.swiftarch }}"
+        run: swift build --package-path platforms/macos --configuration release --arch arm64
       - name: Build self-contained CLI
         env:
           GOOS: darwin
-          GOARCH: ${{ matrix.goarch }}
+          GOARCH: arm64
           CGO_ENABLED: "0"
         run: |
           mkdir -p internal/recorder/assets bin
-          cp "platforms/macos/.build/${{ matrix.swiftarch }}-apple-macosx/release/audio-capture-macos" internal/recorder/assets/audio-capture-macos
+          cp platforms/macos/.build/arm64-apple-macosx/release/audio-capture-macos internal/recorder/assets/audio-capture-macos
           go build -tags embedded -trimpath -ldflags "-s -w" -o bin/audio-record ./cmd/audio-record
       - name: Package
         run: |
           mkdir -p "stage" "dist"
           cp bin/audio-record THIRD_PARTY_NOTICES.md license stage/
-          asset="audio-record-darwin-${{ matrix.goarch }}.tar.gz"
+          asset="audio-record-darwin-arm64.tar.gz"
           tar -czf "dist/$asset" -C stage .
           (cd dist && shasum -a 256 "$asset" > "$asset.sha256")
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.goarch }}
+          name: macos-arm64
           path: dist/*
 
   windows:
