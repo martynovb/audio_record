@@ -3,6 +3,7 @@
 /bin/
 /dist/
 /internal/recorder/assets/audio-capture-macos
+/internal/recorder/assets/audio-capture-windows.exe
 recording-*.m4a
 DerivedData/
 *.xcodeproj/

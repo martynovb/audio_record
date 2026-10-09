@@ -32,8 +32,9 @@ install: build
 	@echo "Installed $(DESTDIR)$(PREFIX)/bin/audio-record"
 
 dist: build
-	mkdir -p dist
-	tar -czf dist/audio-record-darwin-$(shell $(GO) env GOARCH).tar.gz -C bin audio-record
+	mkdir -p dist stage
+	cp bin/audio-record THIRD_PARTY_NOTICES.md license stage/
+	tar -czf dist/audio-record-darwin-$(shell $(GO) env GOARCH).tar.gz -C stage .
 	cd dist && shasum -a 256 audio-record-darwin-$(shell $(GO) env GOARCH).tar.gz > audio-record-darwin-$(shell $(GO) env GOARCH).tar.gz.sha256
 
 test:
@@ -43,5 +44,5 @@ ifeq ($(shell uname -s),Darwin)
 endif
 
 clean:
-	rm -rf bin dist platforms/macos/.build
+	rm -rf bin dist stage platforms/macos/.build platforms/windows/.build
 	rm -f $(EMBEDDED_HELPER)

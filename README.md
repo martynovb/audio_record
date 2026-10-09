@@ -15,9 +15,9 @@ Press `Ctrl+C` to stop. The default file name is
 | Platform | Status | Native API |
 | --- | --- | --- |
 | macOS 15+ | Supported, self-contained release binary | ScreenCaptureKit + AVFoundation |
-| Windows | CLI contract ready; native capture not implemented yet | WASAPI planned |
+| Windows 10/11 x64 | Supported, self-contained release binary | WASAPI + Media Foundation |
 
-The installed macOS executable does not require Go, Swift, FFmpeg, Python, or
+The installed executable does not require Go, Swift, .NET, FFmpeg, Python, or
 the project source tree. It embeds its native helper and extracts a
 content-addressed copy into the user's cache on first launch.
 
@@ -44,10 +44,32 @@ rm -rf "$HOME/Library/Caches/audio-record"
 
 Created `.m4a` files are not removed.
 
-### Build from source
+## Install on Windows
 
-Build-time requirements are Go 1.21+ and Xcode Command Line Tools. They are not
-runtime dependencies:
+Run in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/martynovb/audio_record/main/install.ps1 | iex
+```
+
+The installer verifies the release checksum, installs into
+`%LOCALAPPDATA%\Programs\audio-record`, and adds that directory to the user
+`PATH`. The command is immediately available in the same PowerShell session:
+
+```powershell
+audio-record
+```
+
+To uninstall:
+
+```powershell
+irm https://raw.githubusercontent.com/martynovb/audio_record/main/uninstall.ps1 | iex
+```
+
+## Build from source
+
+On macOS, the build-time requirements are Go 1.21+ and Xcode Command Line
+Tools. They are not runtime dependencies:
 
 ```bash
 make install
@@ -72,12 +94,20 @@ To create a portable release archive containing one executable:
 make dist
 ```
 
+On Windows, install Go 1.21+ and the .NET 9 SDK, then run in PowerShell:
+
+```powershell
+./scripts/build-windows.ps1
+```
+
+The self-contained executable is written to `bin/audio-record.exe`.
+
 ## Options
 
 ```text
 -o, --output FILE       output .m4a file
 --screen-id ID          select a macOS display
---mic-id ID             select a microphone
+--mic-id ID             select a microphone on macOS or Windows
 --no-system-audio       record only the microphone
 --no-microphone         record only system audio
 ```
@@ -92,11 +122,11 @@ cmd/audio-record/       shared executable entry point
 internal/app/           shared arguments and lifecycle
 internal/recorder/      platform contract and OS-selected backends
 platforms/macos/        ScreenCaptureKit capture and native M4A export
+platforms/windows/      WASAPI capture and Media Foundation M4A export
 ```
 
-The common CLI already builds on Windows, but recording intentionally returns
-an explicit “not implemented” error until `backend_windows.go` is backed by a
-native WASAPI implementation. The command-line interface will remain the same.
+Both platforms use the same command-line contract and produce mixed AAC audio
+inside an M4A container.
 
 This is a desktop CLI. iOS would require a separate ReplayKit application and
 cannot use the desktop command-line installation model.

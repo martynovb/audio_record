@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.2.0
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS ${{ matrix.goarch }}
+    runs-on: macos-14
+    strategy:
+      matrix:
+        include:
+          - goarch: arm64
+            swiftarch: arm64
+          - goarch: amd64
+            swiftarch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21.x"
+      - name: Build native helper
+        run: swift build --package-path platforms/macos --configuration release --arch "${{ matrix.swiftarch }}"
+      - name: Build self-contained CLI
+        env:
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p internal/recorder/assets bin
+          cp "platforms/macos/.build/${{ matrix.swiftarch }}-apple-macosx/release/audio-capture-macos" internal/recorder/assets/audio-capture-macos
+          go build -tags embedded -trimpath -ldflags "-s -w" -o bin/audio-record ./cmd/audio-record
+      - name: Package
+        run: |
+          mkdir -p "stage" "dist"
+          cp bin/audio-record THIRD_PARTY_NOTICES.md license stage/
+          asset="audio-record-darwin-${{ matrix.goarch }}.tar.gz"
+          tar -czf "dist/$asset" -C stage .
+          (cd dist && shasum -a 256 "$asset" > "$asset.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.goarch }}
+          path: dist/*
+
+  windows:
+    name: Windows amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21.x"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+      - name: Build and test self-contained CLI
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path stage, dist -Force | Out-Null
+          Copy-Item bin/audio-record.exe, THIRD_PARTY_NOTICES.md, license -Destination stage
+          $asset = "audio-record-windows-amd64.zip"
+          Compress-Archive -Path stage/* -DestinationPath "dist/$asset"
+          $checksum = (Get-FileHash -Algorithm SHA256 "dist/$asset").Hash.ToLowerInvariant()
+          "$checksum  $asset" | Set-Content -Encoding ascii "dist/$asset.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: dist/*
+
+  release:
+    name: Publish release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "audio-record $TAG" \
+            --generate-notes
