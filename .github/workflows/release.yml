@@ -64,7 +64,10 @@ jobs:
           $asset = "audio-record-windows-amd64.zip"
           Compress-Archive -Path stage/* -DestinationPath "dist/$asset"
           $checksum = (Get-FileHash -Algorithm SHA256 "dist/$asset").Hash.ToLowerInvariant()
-          "$checksum  $asset" | Set-Content -Encoding ascii "dist/$asset.sha256"
+          [IO.File]::WriteAllText(
+              (Join-Path $PWD "dist/$asset.sha256"),
+              "$checksum  $asset`n",
+              [Text.Encoding]::ASCII)
       - uses: actions/upload-artifact@v4
         with:
           name: windows-amd64
