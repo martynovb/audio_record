@@ -30,7 +30,10 @@ curl -fsSL https://raw.githubusercontent.com/martynovb/audio_record/main/install
 ```
 
 The installer verifies the archive checksum and puts `audio-record` in
-`~/.local/bin`. Override the location with `AUDIO_RECORD_INSTALL_DIR`.
+`~/.local/bin`. If necessary, it idempotently adds that directory to
+`~/.zprofile` or `~/.bash_profile`; open a new terminal after the first
+installation. Set `AUDIO_RECORD_NO_PATH_UPDATE=1` to disable profile changes,
+or override the installation location with `AUDIO_RECORD_INSTALL_DIR`.
 
 To uninstall:
 

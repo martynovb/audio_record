@@ -11,6 +11,49 @@ fail() {
   exit 1
 }
 
+add_install_directory_to_path() {
+  case ":$PATH:" in
+    *":${install_directory}:"*) return ;;
+  esac
+
+  if [ "${AUDIO_RECORD_NO_PATH_UPDATE:-0}" = "1" ]; then
+    printf 'Add %s to PATH manually.\n' "$install_directory" >&2
+    return
+  fi
+
+  if [ -n "${AUDIO_RECORD_SHELL_PROFILE:-}" ]; then
+    profile_file="$AUDIO_RECORD_SHELL_PROFILE"
+  else
+    case "${SHELL##*/}" in
+      zsh) profile_file="$HOME/.zprofile" ;;
+      bash) profile_file="$HOME/.bash_profile" ;;
+      *)
+        printf 'Add %s to PATH manually (unsupported shell: %s).\n' \
+          "$install_directory" "${SHELL:-unknown}" >&2
+        return
+        ;;
+    esac
+  fi
+
+  if [ "$install_directory" = "$HOME/.local/bin" ]; then
+    path_line='export PATH="$HOME/.local/bin:$PATH"'
+  else
+    escaped_install_directory="$(
+      printf '%s' "$install_directory" | sed 's/[\\"$`]/\\&/g'
+    )"
+    path_line="export PATH=\"${escaped_install_directory}:\$PATH\""
+  fi
+
+  if [ -f "$profile_file" ] && grep -Fqx "$path_line" "$profile_file"; then
+    return
+  fi
+
+  mkdir -p "$(dirname "$profile_file")"
+  printf '\n# Added by the audio-record installer\n%s\n' "$path_line" >> "$profile_file"
+  printf 'Added %s to PATH in %s\n' "$install_directory" "$profile_file"
+  printf 'Open a new terminal or run: . "%s"\n' "$profile_file"
+}
+
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v tar >/dev/null 2>&1 || fail "tar is required"
 command -v shasum >/dev/null 2>&1 || fail "shasum is required"
@@ -58,10 +101,4 @@ install -m 0755 \
   "${install_directory}/audio-record"
 
 printf 'Installed audio-record to %s/audio-record\n' "$install_directory"
-case ":$PATH:" in
-  *":${install_directory}:"*) ;;
-  *)
-    printf '%s\n' "Add this directory to PATH:" >&2
-    printf '  export PATH="%s:$PATH"\n' "$install_directory" >&2
-    ;;
-esac
+add_install_directory_to_path
