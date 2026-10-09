@@ -313,18 +313,10 @@ internal static class AudioExporter
                 : new MixingSampleProvider(providers.Select(provider =>
                     new VolumeSampleProvider(provider) { Volume = 1f / providers.Count }));
 
-            MediaFoundationApi.Startup();
-            try
-            {
-                MediaFoundationEncoder.EncodeToAac(
-                    output.ToWaveProvider16(),
-                    temporaryOutput,
-                    192_000);
-            }
-            finally
-            {
-                MediaFoundationApi.Shutdown();
-            }
+            MediaFoundationEncoder.EncodeToAac(
+                output.ToWaveProvider16(),
+                temporaryOutput,
+                192_000);
 
             File.Move(temporaryOutput, outputPath);
         }

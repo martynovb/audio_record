@@ -13,7 +13,7 @@ permissions:
 jobs:
   macos:
     name: macOS ${{ matrix.goarch }}
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       matrix:
         include:
