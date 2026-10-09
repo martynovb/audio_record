@@ -1,0 +1,43 @@
+name: Windows installer smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - name: Install, launch, and uninstall latest release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $env:AUDIO_RECORD_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "audio-record-install"
+
+          $installer = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/martynovb/audio_record/main/install.ps1").Content
+          Invoke-Expression $installer
+
+          $command = Get-Command audio-record -ErrorAction Stop
+          & $command.Source --help
+          if ($LASTEXITCODE -ne 0) {
+              throw "audio-record --help failed with exit code $LASTEXITCODE"
+          }
+
+          $installedPath = [Environment]::GetEnvironmentVariable("Path", "User") -split ";"
+          if ($installedPath -notcontains $env:AUDIO_RECORD_INSTALL_DIR) {
+              throw "The installer did not add its directory to the user PATH"
+          }
+
+          $uninstaller = (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/martynovb/audio_record/main/uninstall.ps1").Content
+          Invoke-Expression $uninstaller
+
+          if (Test-Path $env:AUDIO_RECORD_INSTALL_DIR) {
+              throw "The uninstaller did not remove the installation directory"
+          }
+          $remainingPath = [Environment]::GetEnvironmentVariable("Path", "User") -split ";"
+          if ($remainingPath -contains $env:AUDIO_RECORD_INSTALL_DIR) {
+              throw "The uninstaller did not remove its directory from the user PATH"
+          }
