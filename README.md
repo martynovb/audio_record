@@ -7,7 +7,10 @@ M4A file. After installation, recording always starts with the same command:
 audio-record
 ```
 
-Press `Ctrl+C` to stop. The default file name is
+Press `Ctrl+C` to stop. After every four hours, the CLI asks whether recording
+should continue. Answer `y` or `yes` within five minutes to start another
+four-hour interval; answer `n` or `no`, or leave the prompt unanswered for five
+minutes, to stop and save the recording. The default file name is
 `recording-YYYYMMDD-HHMMSS.m4a` in the current directory.
 
 ## Platform support

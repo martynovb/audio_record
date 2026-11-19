@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -15,6 +16,11 @@ import (
 	"audio_record/internal/recorder"
 )
 
+const (
+	recordingInterval = 4 * time.Hour
+	responseTimeout   = 5 * time.Minute
+)
+
 type options struct {
 	outputPath        string
 	screenID          string
@@ -24,6 +30,10 @@ type options struct {
 }
 
 func Run(arguments []string, stdout, stderr io.Writer) int {
+	return runWithInput(arguments, os.Stdin, stdout, stderr)
+}
+
+func runWithInput(arguments []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	options, err := parseOptions(arguments, stderr)
 	if errors.Is(err, flag.ErrHelp) {
 		return 0
@@ -32,7 +42,7 @@ func Run(arguments []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if err := record(options, stdout, stderr); err != nil {
+	if err := record(options, stdin, stdout, stderr); err != nil {
 		fmt.Fprintf(stderr, "audio-record: %v\n", err)
 		return 1
 	}
@@ -53,7 +63,7 @@ func parseOptions(arguments []string, stderr io.Writer) (options, error) {
 		fmt.Fprintln(stderr, "Usage: audio-record [options]")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Records system audio and microphone audio into one M4A file.")
-		fmt.Fprintln(stderr, "Press Ctrl+C to stop.")
+		fmt.Fprintln(stderr, "Press Ctrl+C to stop. After every 4 hours, confirm within 5 minutes to continue.")
 		fmt.Fprintln(stderr)
 		flags.PrintDefaults()
 	}
@@ -73,7 +83,7 @@ func parseOptions(arguments []string, stderr io.Writer) (options, error) {
 	return result, nil
 }
 
-func record(options options, stdout, stderr io.Writer) error {
+func record(options options, stdin io.Reader, stdout, stderr io.Writer) error {
 	outputPath, err := prepareOutputPath(options.outputPath)
 	if err != nil {
 		return err
@@ -83,8 +93,21 @@ func record(options options, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
+	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stopSignals()
+	ctx, stopRecording := context.WithCancel(signalContext)
+	monitorDone := make(chan struct{})
+	go func() {
+		defer close(monitorDone)
+		monitorRecordingDuration(
+			ctx,
+			stdin,
+			stdout,
+			recordingInterval,
+			responseTimeout,
+			stopRecording,
+		)
+	}()
 
 	fmt.Fprintln(stdout, "Recording. Press Ctrl+C to stop.")
 	err = backend.Capture(ctx, recorder.Config{
@@ -94,6 +117,8 @@ func record(options options, stdout, stderr io.Writer) error {
 		SystemAudio:  !options.withoutSystem,
 		Microphone:   !options.withoutMicrophone,
 	}, stdout, stderr)
+	stopRecording()
+	<-monitorDone
 	if err != nil {
 		return err
 	}
@@ -103,6 +128,96 @@ func record(options options, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "Saved: %s\n", outputPath)
 	return nil
+}
+
+func monitorRecordingDuration(
+	ctx context.Context,
+	stdin io.Reader,
+	stdout io.Writer,
+	interval time.Duration,
+	timeout time.Duration,
+	stopRecording context.CancelFunc,
+) {
+	input := bufio.NewReader(stdin)
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		fmt.Fprintf(
+			stdout,
+			"\nRecording has been running for 4 hours. Continue recording? [y/N] "+
+				"(auto-stop in 5 minutes): ",
+		)
+		if waitForConfirmation(ctx, input, stdout, timeout) {
+			fmt.Fprintln(stdout, "Continuing recording.")
+			timer.Reset(interval)
+			continue
+		}
+
+		if ctx.Err() == nil {
+			stopRecording()
+		}
+		return
+	}
+}
+
+type inputResult struct {
+	line string
+	err  error
+}
+
+func waitForConfirmation(
+	ctx context.Context,
+	input *bufio.Reader,
+	stdout io.Writer,
+	timeout time.Duration,
+) bool {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	for {
+		result := make(chan inputResult, 1)
+		go func() {
+			line, err := input.ReadString('\n')
+			result <- inputResult{line: line, err: err}
+		}()
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-deadline.C:
+			fmt.Fprintln(stdout, "\nNo response received within 5 minutes. Stopping recording.")
+			return false
+		case response := <-result:
+			switch strings.ToLower(strings.TrimSpace(response.line)) {
+			case "y", "yes":
+				return true
+			case "n", "no":
+				fmt.Fprintln(stdout, "Stopping recording.")
+				return false
+			}
+
+			if response.err != nil {
+				// With no interactive input available, preserve the same five-minute
+				// grace period before stopping the recording.
+				select {
+				case <-ctx.Done():
+					return false
+				case <-deadline.C:
+					fmt.Fprintln(stdout, "\nNo response received within 5 minutes. Stopping recording.")
+					return false
+				}
+			}
+
+			fmt.Fprint(stdout, "Please answer y or n: ")
+		}
+	}
 }
 
 func prepareOutputPath(configured string) (string, error) {
